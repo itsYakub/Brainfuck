@@ -32,65 +32,64 @@
 // OR OTHER DEALINGS IN THE SOFTWARE.
 // ------------------------------------------------------------------------------
 
-/* SECTION: Includes */
-
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
+#include <stdint.h>
 
-/* SECTION: Macro definitions */
-#ifndef global
-	#define global static
-#endif
+typedef char		c8;
+typedef int32_t		i32;
+typedef uint32_t	u32;
+static_assert(sizeof(c8)  == 1, "c8 must be one byte long.");
+static_assert(sizeof(i32) == 4, "i32 must be four bytes long.");
+static_assert(sizeof(u32) == 4, "u32 must be four bytes long.");
 
-/* SECTION: Global variables */
-global int 	program_pointer = 0;
-global int	program_loop = 0;
-global char program_stack[30000] = { 0 };
+static i32 		ft_file_open(const c8* path);
+static i32		ft_file_len(i32 fd);
+static c8* 		ft_file_parse(i32 fd);
 
-/* SECTION: Function declarations */
-static int 		ft_file_open(const char* path);
-static int		ft_file_len(int fd);
-static char* 	ft_file_parse(int fd);
-static int 		ft_interpreter(char* str);
+static i32 		ft_interpret(c8* str);
 
-int main(int argc, const char* argv[]) {
-	char* 	fbuf;
-	int 	fd = 0;
+static i32 	program_pointer = 0;
+static i32	program_loop = 0;
+static c8	program_stack[30000] = { 0 };
 
-	if(argc != 2) {
-		errno = EINVAL;
+i32 main(i32 argc, const c8* argv[]) {
+	if(argc == 2) {
+		i32 fd = 0;
+		if((fd = ft_file_open(argv[1]))) {
+			c8* fbuf;
+			fbuf = ft_file_parse(fd);
+			ft_interpret(fbuf);
+
+			free(fbuf);
+			close(fd);
+			return 0;
+		}
 		fprintf(stderr, "[ ERR ]: %s\n", strerror(errno));
-
 		return 1;
 	}
 
-	if(!(fd = ft_file_open(argv[1]))) {
-		fprintf(stderr, "[ ERR ]: %s\n", strerror(errno));
-
-		return 1;
-	}
-
-	fbuf = ft_file_parse(fd);
-	ft_interpreter(fbuf);
-
-	free(fbuf);
-	close(fd);
-
-	return 0;
+	errno = EINVAL;
+	fprintf(stderr, "[ ERR ]: %s\n", strerror(errno));
+	return 1;
 }
 
-/* SECTION: Function definitions */
+i32 		ft_file_open(const char* path) {
+	if(!strstr(path, ".bf") || !strstr(path, ".b")) {
+		errno = EINVAL;
 
-static int 		ft_file_open(const char* path) {
+		return 0;
+	}
 	int res = open(path, O_RDONLY);
 	return res;
 }
 
-static int		ft_file_len(int fd) {
+i32		ft_file_len(int fd) {
 	int res = 0;
 	char c;
 	while(read(fd, &c, 1) > 0) {
@@ -100,15 +99,16 @@ static int		ft_file_len(int fd) {
 	return res;
 }
 
-static char* 	ft_file_parse(int fd) {
+c8* 	ft_file_parse(int fd) {
 	int 	len = ft_file_len(fd);
 	char* 	res = (char*) malloc(len * sizeof(char));
-	if(!res)
+	if(!res) {
+		fprintf(stderr, "[ ERR ]: %s\n", strerror(errno));
 		return NULL;
+	}
 
 	if(!read(fd, res, len)) {
 		fprintf(stderr, "[ ERR ]: %s\n", strerror(errno));
-
 		free(res);
 		return NULL;
 	}
@@ -116,7 +116,7 @@ static char* 	ft_file_parse(int fd) {
 	return res;
 }
 
-static int 		ft_interpreter(char* str) {
+i32 		ft_interpret(char* str) {
 	if(!str)
 		return 0;
 
@@ -138,7 +138,7 @@ static int 		ft_interpreter(char* str) {
 			case '[': {
 				// Firstly, let's create a variable scpy,
 				// which is the pointer to the initial string position.
-				// We'll pass it to the argument of a recursive call to ft_interpreter,
+				// We'll pass it to the argument of a recursive call to ft_interpret,
 				// which will start at the beginning of the loop and process it,
 				// until the value of the current pointer is equal to, or less than 0.
 				char* scpy = str;
@@ -157,13 +157,13 @@ static int 		ft_interpreter(char* str) {
 				if(!program_loop) {
 					str[-1] = 0;
 					while(program_stack[program_pointer]) {
-						ft_interpreter(scpy);
+						ft_interpret(scpy);
 					}
 					str[-1] = ']';
 					break;
 				}
 		 	}
-			case  ']': { printf("[ ERR ]: Unbalanced bracket\n"); return 1; }
+			case  ']': { fprintf(stderr, "[ ERR ]: Unbalanced bracket\n"); return 1; }
 			default: { } break;
 		}
 
